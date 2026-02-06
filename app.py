@@ -1,6 +1,7 @@
 # app.py
 
 import streamlit as st
+import io
 from pathlib import Path
 
 from logic import (
@@ -48,13 +49,29 @@ if uploaded_file is not None:
         )
 
         st.success(f"完了：{len(unit_dfs)} 個のCSVを生成しました")
-        st.write(f"保存先：{output_dir.resolve()}")
+        st.info("各CSVは下のボタンからダウンロードしてください")
 
         # 時系列グラフ可視化
         for unit_id, df_unit in unit_dfs.items():
             filename = make_output_filename(unit_id, meta.start_epoch)
             fig = plot_timeseries_xyz(df_unit, filename)
             st.plotly_chart(fig, width="stretch")
+
+        st.subheader("unit別CSVダウンロード")
+
+        for unit_id, df_unit in unit_dfs.items():
+            filename = make_output_filename(unit_id, meta.start_epoch)
+
+            buffer = io.StringIO()
+            df_unit.to_csv(buffer, index=False)
+            csv_bytes = buffer.getvalue().encode("utf-8")
+
+            st.download_button(
+                label=f"⬇ {filename}",
+                data=csv_bytes,
+                file_name=filename,
+                mime="text/csv",
+            )
 
     except Exception as e:
         st.error("処理中にエラーが発生しました")

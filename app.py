@@ -1,5 +1,3 @@
-# app.py
-
 import streamlit as st
 import io
 from pathlib import Path
@@ -15,12 +13,39 @@ from logic import (
 from logic.visualizer import plot_timeseries_xyz
 from logic.naming import make_output_filename
 
-st.title("Sensor CSV → unit別CSV 変換")
 
-uploaded_file = st.file_uploader(
-    "CSVファイルをアップロード",
-    type="csv",
+# =====================
+# ページ設定
+# =====================
+st.set_page_config(
+    page_title="Sonas data-extractor",
+    layout="wide",
 )
+
+# =====================
+# サイドバー
+# =====================
+with st.sidebar:
+    st.header("操作パネル")
+
+    uploaded_file = st.file_uploader(
+        "CSVファイルをアップロード",
+        type="csv",
+    )
+
+    status_area = st.empty()
+    guide_area = st.empty()
+
+    st.divider()
+    st.subheader("ダウンロード")
+
+    download_area = st.container()
+
+# =====================
+# メインエリア
+# =====================
+st.title("SONAS Acc_Data Extractor")
+st.subheader("生データより子機ユニット番号別に加速度データを抽出")
 
 output_dir = Path("output")
 
@@ -41,38 +66,39 @@ if uploaded_file is not None:
         # ⑤ unit_idごとに分割
         unit_dfs = split_by_unit_id(validated_df)
 
-        # ⑥ CSV保存
+        # ⑥ CSV保存（ローカル用・Cloudでは参照のみ）
         save_unit_csvs(
             unit_dfs=unit_dfs,
             output_dir=output_dir,
             start_epoch=meta.start_epoch,
         )
 
-        st.success(f"完了：{len(unit_dfs)} 個のCSVを生成しました")
-        st.info("各CSVは下のボタンからダウンロードしてください")
+        # ===== サイドバー表示 =====
+        status_area.success(f"アップロード完了：{len(unit_dfs)} 個のCSVを生成しました")
+        guide_area.info("下のボタンからCSVをダウンロードしてください")
 
-        # 時系列グラフ可視化
+        # ===== グラフ表示（メイン）=====
         for unit_id, df_unit in unit_dfs.items():
             filename = make_output_filename(unit_id, meta.start_epoch)
             fig = plot_timeseries_xyz(df_unit, filename)
             st.plotly_chart(fig, width="stretch")
 
-        st.subheader("unit別CSVダウンロード")
+        # ===== ダウンロードボタン（サイドバー）=====
+        with download_area:
+            for unit_id, df_unit in unit_dfs.items():
+                filename = make_output_filename(unit_id, meta.start_epoch)
 
-        for unit_id, df_unit in unit_dfs.items():
-            filename = make_output_filename(unit_id, meta.start_epoch)
+                buffer = io.StringIO()
+                df_unit.to_csv(buffer, index=False)
+                csv_bytes = buffer.getvalue().encode("utf-8")
 
-            buffer = io.StringIO()
-            df_unit.to_csv(buffer, index=False)
-            csv_bytes = buffer.getvalue().encode("utf-8")
-
-            st.download_button(
-                label=f"⬇ {filename}",
-                data=csv_bytes,
-                file_name=filename,
-                mime="text/csv",
-            )
+                st.download_button(
+                    label=f"⬇ {filename}",
+                    data=csv_bytes,
+                    file_name=filename,
+                    mime="text/csv",
+                )
 
     except Exception as e:
-        st.error("処理中にエラーが発生しました")
+        status_area.error("エラーが発生しました")
         st.exception(e)
